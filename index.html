@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sorteio de Times</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green: #1a7a2e;
+      --green-light: #25a63e;
+      --green-dark: #104e1c;
+      --accent: #f5c518;
+      --bg: #0f1f14;
+      --surface: #162b1e;
+      --surface2: #1e3828;
+      --text: #e8f5ec;
+      --text-muted: #7aaa86;
+      --border: #2a4d35;
+      --danger: #e05252;
+      --radius: 12px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 16px 60px;
+    }
+
+    header { text-align: center; margin-bottom: 32px; }
+    header h1 { font-size: 2rem; font-weight: 800; color: var(--accent); letter-spacing: -0.5px; }
+    header p { color: var(--text-muted); margin-top: 4px; font-size: 0.9rem; }
+    .ball { font-size: 2.5rem; display: block; margin-bottom: 8px; }
+
+    .container { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .card h2 {
+      font-size: 1rem; font-weight: 700; color: var(--accent);
+      margin-bottom: 14px; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 0; margin-bottom: 14px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+    .tab {
+      flex: 1; padding: 8px; background: var(--surface2); color: var(--text-muted);
+      font-size: 0.85rem; font-weight: 600; border: none; cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .tab.active { background: var(--green-light); color: #fff; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Single input */
+    .input-row { display: flex; gap: 8px; }
+    .input-row input {
+      flex: 1; padding: 10px 14px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+      font-size: 1rem; outline: none; transition: border-color 0.2s;
+    }
+    .input-row input:focus { border-color: var(--green-light); }
+    .input-row input::placeholder { color: var(--text-muted); }
+
+    /* Textarea list input */
+    .list-area {
+      width: 100%; min-height: 120px; padding: 10px 14px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 0.95rem;
+      outline: none; resize: vertical; font-family: inherit;
+      transition: border-color 0.2s; line-height: 1.6;
+    }
+    .list-area:focus { border-color: var(--green-light); }
+    .list-area::placeholder { color: var(--text-muted); }
+    .list-hint { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 8px; }
+
+    .btn {
+      padding: 10px 18px; border: none; border-radius: 8px;
+      font-size: 0.95rem; font-weight: 600; cursor: pointer;
+      transition: filter 0.15s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn:hover { filter: brightness(1.15); }
+    .btn-primary { background: var(--green-light); color: #fff; }
+    .btn-block { width: 100%; margin-top: 8px; }
+    .btn-accent {
+      background: var(--accent); color: #1a1a1a; font-size: 1.05rem;
+      padding: 13px 24px; border-radius: 10px; width: 100%; margin-top: 4px;
+    }
+    .btn-danger {
+      background: transparent; color: var(--danger); border: 1px solid var(--danger);
+      padding: 4px 10px; font-size: 0.8rem; border-radius: 6px;
+    }
+    .btn-clear {
+      background: transparent; color: var(--text-muted);
+      border: 1px solid var(--border); font-size: 0.8rem; padding: 6px 12px;
+    }
+
+    /* Player list */
+    .player-list {
+      display: flex; flex-direction: column; gap: 6px;
+      margin-top: 12px; max-height: 240px; overflow-y: auto; padding-right: 4px;
+    }
+    .player-list::-webkit-scrollbar { width: 4px; }
+    .player-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .player-item {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 12px; transition: border-color 0.2s;
+    }
+    .player-num { color: var(--text-muted); font-size: 0.8rem; min-width: 20px; }
+    .player-name { flex: 1; font-size: 0.95rem; }
+    .player-count { font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; text-align: right; }
+
+    /* Settings */
+    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .field label {
+      display: block; font-size: 0.8rem; color: var(--text-muted);
+      margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.4px;
+    }
+    .field input[type="number"] {
+      width: 100%; padding: 10px 14px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 8px; color: var(--text);
+      font-size: 1.1rem; font-weight: 700; outline: none; text-align: center;
+      -moz-appearance: textfield;
+    }
+    .field input[type="number"]::-webkit-outer-spin-button,
+    .field input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .field input[type="number"]:focus { border-color: var(--green-light); }
+
+    /* Results */
+    #results { display: none; }
+    .results-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .teams-grid { display: flex; flex-direction: column; gap: 12px; }
+    .team-card { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); }
+    .team-header {
+      padding: 10px 16px; font-weight: 700; font-size: 0.95rem;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .team-players { padding: 10px 16px; background: var(--surface2); display: flex; flex-direction: column; gap: 4px; }
+    .team-player {
+      font-size: 0.9rem; padding: 4px 0; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .team-player:last-child { border-bottom: none; }
+    .team-player-num { color: var(--text-muted); font-size: 0.75rem; min-width: 16px; }
+
+    .leftover-card { background: var(--surface2); border: 1px dashed var(--border); border-radius: 10px; padding: 12px 16px; }
+    .leftover-card h3 { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; }
+    .leftover-names { display: flex; flex-wrap: wrap; gap: 6px; }
+    .leftover-tag { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px; font-size: 0.85rem; }
+
+    .team-0 .team-header { background: #1e6fa8; }
+    .team-1 .team-header { background: #a81e1e; }
+    .team-2 .team-header { background: #1ea85a; }
+    .team-3 .team-header { background: #a87a1e; }
+    .team-4 .team-header { background: #7a1ea8; }
+    .team-5 .team-header { background: #1e9fa8; }
+    .team-6 .team-header { background: #a84e1e; }
+    .team-7 .team-header { background: #4ea81e; }
+
+    .error-msg { color: var(--danger); font-size: 0.85rem; margin-top: 8px; display: none; }
+    .empty-msg { color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 16px 0 4px; }
+    .header-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+
+    @media (max-width: 400px) { .settings-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="ball">⚽</span>
+  <h1>Sorteio de Times</h1>
+  <p>Adicione os jogadores e sorteie os times</p>
+</header>
+
+<div class="container">
+
+  <!-- Jogadores -->
+  <div class="card">
+    <h2>Jogadores</h2>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('single')">Um por vez</button>
+      <button class="tab" onclick="switchTab('bulk')">Colar lista</button>
+    </div>
+
+    <!-- Tab: um por vez -->
+    <div class="tab-panel active" id="tab-single">
+      <div class="input-row">
+        <input type="text" id="playerInput" placeholder="Nome do jogador..." maxlength="40" autocomplete="off" />
+        <button class="btn btn-primary" onclick="addPlayer()">Adicionar</button>
+      </div>
+      <div id="errorMsg" class="error-msg"></div>
+    </div>
+
+    <!-- Tab: colar lista -->
+    <div class="tab-panel" id="tab-bulk">
+      <p class="list-hint">Cole ou digite um nome por linha:</p>
+      <textarea class="list-area" id="bulkInput" placeholder="Felipe&#10;Rafael&#10;Lucas&#10;Eduardo&#10;Jonas"></textarea>
+      <button class="btn btn-primary btn-block" onclick="addBulk()">Adicionar lista</button>
+      <div id="bulkError" class="error-msg"></div>
+    </div>
+
+    <div id="playerList" class="player-list"></div>
+    <div class="header-actions" id="clearRow" style="display:none;">
+      <button class="btn btn-clear" onclick="clearAll()">Limpar tudo</button>
+    </div>
+    <p class="player-count" id="playerCount"></p>
+  </div>
+
+  <!-- Configurações -->
+  <div class="card">
+    <h2>Configurações</h2>
+    <div class="settings-grid">
+      <div class="field">
+        <label>Número de times</label>
+        <input type="number" id="numTeams" value="2" min="2" max="8" />
+      </div>
+      <div class="field">
+        <label>Jogadores por time</label>
+        <input type="number" id="playersPerTeam" value="5" min="1" max="30" />
+      </div>
+    </div>
+    <button class="btn btn-accent" onclick="sortear()">🎲 Sortear Times</button>
+    <div id="sortError" class="error-msg"></div>
+  </div>
+
+  <!-- Resultado -->
+  <div id="results">
+    <div class="results-header">
+      <h2 style="color:var(--accent); font-size:1rem; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Resultado</h2>
+      <button class="btn btn-clear" onclick="resetResults()">Novo sorteio</button>
+    </div>
+    <div class="teams-grid" id="teamsGrid"></div>
+    <div id="leftoverSection"></div>
+  </div>
+
+</div>
+
+<script>
+  let players = [];
+  let activeTab = 'single';
+
+  const playerInput = document.getElementById('playerInput');
+  const playerList  = document.getElementById('playerList');
+  const playerCount = document.getElementById('playerCount');
+  const errorMsg    = document.getElementById('errorMsg');
+  const bulkError   = document.getElementById('bulkError');
+  const sortError   = document.getElementById('sortError');
+  const clearRow    = document.getElementById('clearRow');
+
+  playerInput.addEventListener('keydown', e => { if (e.key === 'Enter') addPlayer(); });
+
+  function showError(el, msg) {
+    el.textContent = msg;
+    el.style.display = 'block';
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.style.display = 'none'; }, 3000);
+  }
+
+  function switchTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll('.tab').forEach((el, i) => {
+      el.classList.toggle('active', (i === 0 && tab === 'single') || (i === 1 && tab === 'bulk'));
+    });
+    document.getElementById('tab-single').classList.toggle('active', tab === 'single');
+    document.getElementById('tab-bulk').classList.toggle('active', tab === 'bulk');
+  }
+
+  function normalizeName(s) {
+    return s.trim().replace(/\s+/g, ' ');
+  }
+
+  function addPlayer() {
+    const name = normalizeName(playerInput.value);
+    if (!name) return;
+    if (players.map(p => p.toLowerCase()).includes(name.toLowerCase())) {
+      showError(errorMsg, 'Jogador já adicionado.');
+      return;
+    }
+    players.push(name);
+    playerInput.value = '';
+    playerInput.focus();
+    renderPlayers();
+  }
+
+  function addBulk() {
+    const raw = document.getElementById('bulkInput').value;
+    const names = raw.split('\n')
+      .map(normalizeName)
+      .filter(n => n.length > 0);
+
+    if (names.length === 0) {
+      showError(bulkError, 'Nenhum nome encontrado na lista.');
+      return;
+    }
+
+    let added = 0;
+    let dupes = 0;
+    names.forEach(name => {
+      if (players.map(p => p.toLowerCase()).includes(name.toLowerCase())) {
+        dupes++;
+      } else {
+        players.push(name);
+        added++;
+      }
+    });
+
+    document.getElementById('bulkInput').value = '';
+    renderPlayers();
+
+    if (dupes > 0 && added === 0) {
+      showError(bulkError, `Todos os ${dupes} nomes já estavam na lista.`);
+    } else if (dupes > 0) {
+      showError(bulkError, `${added} adicionado(s). ${dupes} duplicado(s) ignorado(s).`);
+    }
+  }
+
+  function removePlayer(i) {
+    players.splice(i, 1);
+    renderPlayers();
+  }
+
+  function renderPlayers() {
+    if (players.length === 0) {
+      playerList.innerHTML = '<p class="empty-msg">Nenhum jogador adicionado ainda.</p>';
+      playerCount.textContent = '';
+      clearRow.style.display = 'none';
+      return;
+    }
+
+    clearRow.style.display = 'flex';
+
+    playerList.innerHTML = players.map((p, i) => `
+      <div class="player-item">
+        <span class="player-num">${i + 1}</span>
+        <span class="player-name">${escHtml(p)}</span>
+        <button class="btn btn-danger" onclick="removePlayer(${i})">✕</button>
+      </div>`).join('');
+
+    playerCount.textContent = `${players.length} jogador${players.length !== 1 ? 'es' : ''}`;
+  }
+
+  function clearAll() {
+    players = [];
+    renderPlayers();
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* Fisher-Yates com Math.random — embaralha no lugar */
+  function shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  /* Nomes com regras fixas — case-insensitive */
+  const MY_NAME       = 'felipe';
+  const NEVER_WITH_ME = ['direl', 'abel', 'thiago'];
+
+  function matchName(player, target) {
+    return player.trim().toLowerCase().includes(target.toLowerCase());
+  }
+
+  function sortear() {
+    sortError.style.display = 'none';
+
+    const numTeams    = parseInt(document.getElementById('numTeams').value) || 0;
+    const perTeam     = parseInt(document.getElementById('playersPerTeam').value) || 0;
+    const totalNeeded = numTeams * perTeam;
+
+    if (players.length < 2) { showError(sortError, 'Adicione pelo menos 2 jogadores.'); return; }
+    if (numTeams < 2 || numTeams > 8) { showError(sortError, 'Número de times deve ser entre 2 e 8.'); return; }
+    if (perTeam < 1) { showError(sortError, 'Coloque pelo menos 1 jogador por time.'); return; }
+    if (players.length < numTeams) { showError(sortError, 'Jogadores insuficientes para formar os times.'); return; }
+
+    const felipePlayer = players.find(p => matchName(p, MY_NAME));
+    const felipeInList = !!felipePlayer;
+
+    /* Direl/Abel/Thiago não podem cair no Time 1 se Felipe estiver na lista */
+    const effectiveExcluded = new Set();
+    if (felipeInList) {
+      NEVER_WITH_ME.forEach(rival => {
+        const found = players.find(p => matchName(p, rival));
+        if (found) effectiveExcluded.add(found);
+      });
+    }
+
+    /* Pools separados */
+    let freePool     = shuffle(players.filter(p => !effectiveExcluded.has(p)));
+    const excludedPool = shuffle(players.filter(p =>  effectiveExcluded.has(p)));
+
+    const teams = Array.from({ length: numTeams }, () => []);
+
+    /* Se Felipe está na lista, ele vai primeiro pro Time 1 */
+    if (felipeInList) {
+      teams[0].push(felipePlayer);
+      freePool = freePool.filter(p => p !== felipePlayer);
+    }
+
+    let fi = 0;
+    let ei = 0;
+
+    /* Completar Time 1 com jogadores livres */
+    while (teams[0].length < perTeam) {
+      if (fi < freePool.length)          teams[0].push(freePool[fi++]);
+      else if (ei < excludedPool.length) teams[0].push(excludedPool[ei++]);
+      else break;
+    }
+
+    /* Distribuir restante aleatoriamente entre os outros times */
+    const remaining = shuffle([...freePool.slice(fi), ...excludedPool.slice(ei)]);
+    let ri = 0;
+    for (let t = 1; t < numTeams; t++) {
+      while (teams[t].length < perTeam && ri < remaining.length) {
+        teams[t].push(remaining[ri++]);
+      }
+    }
+
+    renderResults(teams, remaining.slice(ri));
+  }
+
+  function renderResults(teams, leftover) {
+    const resultsDiv = document.getElementById('results');
+    const grid       = document.getElementById('teamsGrid');
+    const leftSec    = document.getElementById('leftoverSection');
+
+    grid.innerHTML = teams.map((team, i) => `
+      <div class="team-card team-${i}">
+        <div class="team-header">
+          <span>Time ${i + 1}${i === 0 ? ' ⭐' : ''}</span>
+          <span style="opacity:0.8; font-size:0.8rem;">${team.length} jogador${team.length !== 1 ? 'es' : ''}</span>
+        </div>
+        <div class="team-players">
+          ${team.length === 0
+            ? '<span style="color:var(--text-muted); font-size:0.85rem;">Sem jogadores</span>'
+            : team.map((p, j) => `<div class="team-player"><span class="team-player-num">${j + 1}</span>${escHtml(p)}</div>`).join('')
+          }
+        </div>
+      </div>
+    `).join('');
+
+    leftSec.innerHTML = leftover.length > 0
+      ? `<div class="leftover-card" style="margin-top:12px;">
+           <h3>Fora dos times (${leftover.length})</h3>
+           <div class="leftover-names">
+             ${leftover.map(p => `<span class="leftover-tag">${escHtml(p)}</span>`).join('')}
+           </div>
+         </div>`
+      : '';
+
+    resultsDiv.style.display = 'block';
+    resultsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function resetResults() {
+    document.getElementById('results').style.display = 'none';
+  }
+
+  renderPlayers();
+</script>
+</body>
+</html>
