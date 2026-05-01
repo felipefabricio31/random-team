@@ -206,7 +206,7 @@
     <!-- Tab: colar lista -->
     <div class="tab-panel" id="tab-bulk">
       <p class="list-hint">Cole ou digite um nome por linha:</p>
-      <textarea class="list-area" id="bulkInput" placeholder="Felipe&#10;Rafael&#10;Lucas&#10;Eduardo&#10;Jonas"></textarea>
+      <textarea class="list-area" id="bulkInput" placeholder="cole a lista"></textarea>
       <button class="btn btn-primary btn-block" onclick="addBulk()">Adicionar lista</button>
       <div id="bulkError" class="error-msg"></div>
     </div>
@@ -224,7 +224,7 @@
     <div class="settings-grid">
       <div class="field">
         <label>Número de times</label>
-        <input type="number" id="numTeams" value="2" min="2" max="8" />
+        <input type="number" id="numTeams" value="4" min="2" max="8" />
       </div>
       <div class="field">
         <label>Jogadores por time</label>
@@ -371,8 +371,9 @@
   }
 
   /* Nomes com regras fixas — case-insensitive */
-  const MY_NAME       = 'felipe';
-  const NEVER_WITH_ME = ['direl', 'abel', 'thiago'];
+  const MY_NAME  = 'felipe';
+  const RAFAEL_F = 'rafael f';
+  let rafaelFDraws = 0;
 
   function matchName(player, target) {
     return player.trim().toLowerCase().includes(target.toLowerCase());
@@ -390,53 +391,90 @@
     if (perTeam < 1) { showError(sortError, 'Coloque pelo menos 1 jogador por time.'); return; }
     if (players.length < numTeams) { showError(sortError, 'Jogadores insuficientes para formar os times.'); return; }
 
-    const felipePlayer = players.find(p => matchName(p, MY_NAME));
-    const felipeInList = !!felipePlayer;
+    const felipePlayer  = players.find(p => matchName(p, MY_NAME));
+    const felipeInList  = !!felipePlayer;
+    const rafaelFPlayer = players.find(p => matchName(p, RAFAEL_F));
+    if (rafaelFPlayer) rafaelFDraws++;
+    /* vez sim (1ª, 4ª, 7ª…), vez não (2ª e 3ª) */
+    const rafaelWithFelipe = !!(rafaelFPlayer && felipeInList && rafaelFDraws % 3 === 1);
 
-    /* Direl/Abel/Thiago não podem cair no Time 1 se Felipe estiver na lista */
-    const effectiveExcluded = new Set();
-    if (felipeInList) {
-      NEVER_WITH_ME.forEach(rival => {
-        const found = players.find(p => matchName(p, rival));
-        if (found) effectiveExcluded.add(found);
-      });
+    /* Pares que nunca podem cair no mesmo time */
+    const CONSTRAINT_PAIRS = [
+      [MY_NAME, 'direl'],
+      [MY_NAME, 'abel'],
+      [MY_NAME, 'thiago'],
+      ['abel', 'thiago'],
+    ];
+    if (rafaelFPlayer && felipeInList && !rafaelWithFelipe) {
+      CONSTRAINT_PAIRS.push([MY_NAME, RAFAEL_F]);
     }
 
-    /* Pools separados */
-    let freePool     = shuffle(players.filter(p => !effectiveExcluded.has(p)));
-    const excludedPool = shuffle(players.filter(p =>  effectiveExcluded.has(p)));
+    /* Grafo de conflitos entre jogadores reais */
+    const conflictsOf = new Map();
+    const addConflict = (a, b) => {
+      if (!a || !b || a === b) return;
+      if (!conflictsOf.has(a)) conflictsOf.set(a, new Set());
+      if (!conflictsOf.has(b)) conflictsOf.set(b, new Set());
+      conflictsOf.get(a).add(b);
+      conflictsOf.get(b).add(a);
+    };
+    CONSTRAINT_PAIRS.forEach(([nameA, nameB]) => {
+      addConflict(
+        players.find(p => matchName(p, nameA)),
+        players.find(p => matchName(p, nameB))
+      );
+    });
 
     const teams = Array.from({ length: numTeams }, () => []);
+    const placed = new Set();
 
-    /* Se Felipe está na lista, ele vai primeiro pro Time 1 */
+    /* Felipe vai para um time aleatório */
+    let felipeTeamIdx = -1;
     if (felipeInList) {
-      teams[0].push(felipePlayer);
-      freePool = freePool.filter(p => p !== felipePlayer);
-    }
-
-    let fi = 0;
-    let ei = 0;
-
-    /* Completar Time 1 com jogadores livres */
-    while (teams[0].length < perTeam) {
-      if (fi < freePool.length)          teams[0].push(freePool[fi++]);
-      else if (ei < excludedPool.length) teams[0].push(excludedPool[ei++]);
-      else break;
-    }
-
-    /* Distribuir restante aleatoriamente entre os outros times */
-    const remaining = shuffle([...freePool.slice(fi), ...excludedPool.slice(ei)]);
-    let ri = 0;
-    for (let t = 1; t < numTeams; t++) {
-      while (teams[t].length < perTeam && ri < remaining.length) {
-        teams[t].push(remaining[ri++]);
+      felipeTeamIdx = Math.floor(Math.random() * numTeams);
+      teams[felipeTeamIdx].push(felipePlayer);
+      placed.add(felipePlayer);
+      /* Rafael F junto com Felipe na vez certa */
+      if (rafaelWithFelipe && teams[felipeTeamIdx].length < perTeam) {
+        teams[felipeTeamIdx].push(rafaelFPlayer);
+        placed.add(rafaelFPlayer);
       }
     }
 
-    renderResults(teams, remaining.slice(ri));
+    /* Jogadores com conflitos são colocados primeiro, respeitando as regras */
+    const constrainedNames = [...new Set(CONSTRAINT_PAIRS.flat().filter(n => n !== MY_NAME))];
+    const constrainedPlayers = shuffle(
+      constrainedNames.map(n => players.find(p => matchName(p, n))).filter(Boolean)
+    );
+    for (const player of constrainedPlayers) {
+      if (placed.has(player)) continue;
+      const myConflicts = conflictsOf.get(player) || new Set();
+      const validTeams = [];
+      for (let t = 0; t < numTeams; t++) {
+        if (teams[t].length >= perTeam) continue;
+        if (teams[t].some(p => myConflicts.has(p))) continue;
+        validTeams.push(t);
+      }
+      const chosen = validTeams.length > 0
+        ? validTeams[Math.floor(Math.random() * validTeams.length)]
+        : (() => { for (let t = 0; t < numTeams; t++) { if (teams[t].length < perTeam) return t; } return 0; })();
+      teams[chosen].push(player);
+      placed.add(player);
+    }
+
+    /* Preencher vagas restantes com os demais jogadores */
+    const freePlayers = shuffle(players.filter(p => !placed.has(p)));
+    let fi = 0;
+    for (let t = 0; t < numTeams; t++) {
+      while (teams[t].length < perTeam && fi < freePlayers.length) {
+        teams[t].push(freePlayers[fi++]);
+      }
+    }
+
+    renderResults(teams, freePlayers.slice(fi), felipeTeamIdx);
   }
 
-  function renderResults(teams, leftover) {
+  function renderResults(teams, leftover, felipeTeamIdx = -1) {
     const resultsDiv = document.getElementById('results');
     const grid       = document.getElementById('teamsGrid');
     const leftSec    = document.getElementById('leftoverSection');
@@ -444,7 +482,6 @@
     grid.innerHTML = teams.map((team, i) => `
       <div class="team-card team-${i}">
         <div class="team-header">
-          <span>Time ${i + 1}${i === 0 ? ' ⭐' : ''}</span>
           <span style="opacity:0.8; font-size:0.8rem;">${team.length} jogador${team.length !== 1 ? 'es' : ''}</span>
         </div>
         <div class="team-players">
