@@ -378,6 +378,7 @@
   const NEVER_WITH_FELIPE  = ['abel', 'thiago', 'brendo', 'breno', 'sidão', 'sidao'];
   const CONSTRAINT_PAIRS   = [
     ['michel', 'rafael'],
+    ['guilherme', 'rafael'],
     ['abel',   'brendo'],
     ['abel',   'thiago'],
     ['brendo', 'thiago'],
@@ -463,7 +464,7 @@
       placed.add(player);
     }
 
-    /* Preencher vagas restantes com os demais */
+    /* Preencher vagas em ordem — o último time fica com o que sobrar */
     const freePlayers = shuffle(players.filter(p => !placed.has(p)));
     let fi = 0;
     for (let t = 0; t < numTeams; t++) {
@@ -492,10 +493,9 @@
     const numTeams = parseInt(document.getElementById('numTeams').value) || 0;
     const perTeam  = parseInt(document.getElementById('playersPerTeam').value) || 0;
 
-    if (players.length < 2)           { showError(sortError, 'Adicione pelo menos 2 jogadores.'); return; }
+    // if (players.length < 1)           { showError(sortError, 'Adicione pelo menos 1 jogador.'); return; }
     if (numTeams < 2 || numTeams > 8) { showError(sortError, 'Número de times deve ser entre 2 e 8.'); return; }
     if (perTeam < 1)                  { showError(sortError, 'Coloque pelo menos 1 jogador por time.'); return; }
-    if (players.length < numTeams)    { showError(sortError, 'Jogadores insuficientes para formar os times.'); return; }
 
     const felipePlayer  = players.find(p => matchName(p, MY_NAME));
     const alwaysPlayers = ALWAYS_WITH_FELIPE.map(n => players.find(p => matchName(p, n))).filter(Boolean);
