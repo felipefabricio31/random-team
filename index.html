@@ -374,7 +374,7 @@
 
   /* Nomes com regras fixas — case-insensitive */
   const MY_NAME            = 'felipe';
-  const ALWAYS_WITH_FELIPE = ['rafael', 'guilherme'];
+  const ALWAYS_WITH_FELIPE = ['victor', 'guilherme', 'eduardo', 'silvinho'];
   const NEVER_WITH_FELIPE  = ['abel', 'thiago', 'brendo', 'breno', 'sidão', 'sidao'];
   const CONSTRAINT_PAIRS   = [
     ['michel', 'rafael'],
@@ -469,6 +469,17 @@
     for (let t = 0; t < numTeams; t++) {
       while (teams[t].length < perTeam && fi < freePlayers.length) {
         teams[t].push(freePlayers[fi++]);
+      }
+    }
+
+    /* Reposiciona Felipe: aleatoriamente segundo ou último no seu time */
+    if (felipePlayer && FELIPE_TEAM_IDX < teams.length) {
+      const t = teams[FELIPE_TEAM_IDX];
+      const idx = t.indexOf(felipePlayer);
+      if (idx !== -1 && t.length > 1) {
+        t.splice(idx, 1);
+        const pos = Math.random() < 0.5 ? 1 : t.length;
+        t.splice(pos, 0, felipePlayer);
       }
     }
 
