@@ -353,6 +353,8 @@
 
   function clearAll() {
     players = [];
+    drawCount = 0;
+    lastDrawSignature = null;
     renderPlayers();
   }
 
@@ -371,47 +373,32 @@
   }
 
   /* Nomes com regras fixas — case-insensitive */
-  const MY_NAME  = 'felipe';
-  const RAFAEL_F = 'rafael f';
-  let rafaelFDraws = 0;
+  const MY_NAME            = 'felipe';
+  const ALWAYS_WITH_FELIPE = ['rafael', 'guilherme'];
+  const NEVER_WITH_FELIPE  = ['abel', 'thiago', 'brendo', 'breno', 'sidão', 'sidao'];
+  const CONSTRAINT_PAIRS   = [
+    ['michel', 'rafael'],
+    ['abel',   'brendo'],
+    ['abel',   'thiago'],
+    ['brendo', 'thiago'],
+  ];
+  let lastDrawSignature = null;
+  let drawCount = 0;
 
   function matchName(player, target) {
     return player.trim().toLowerCase().includes(target.toLowerCase());
   }
 
-  function sortear() {
-    sortError.style.display = 'none';
+  function teamSignature(teams) {
+    return JSON.stringify(
+      teams.map(t => [...t].sort((a, b) => a.localeCompare(b)))
+    );
+  }
 
-    const numTeams    = parseInt(document.getElementById('numTeams').value) || 0;
-    const perTeam     = parseInt(document.getElementById('playersPerTeam').value) || 0;
-    const totalNeeded = numTeams * perTeam;
+  function doSortOnce(numTeams, perTeam, felipePlayer, alwaysPlayers) {
+    const felipeInList = !!felipePlayer;
 
-    if (players.length < 2) { showError(sortError, 'Adicione pelo menos 2 jogadores.'); return; }
-    if (numTeams < 2 || numTeams > 8) { showError(sortError, 'Número de times deve ser entre 2 e 8.'); return; }
-    if (perTeam < 1) { showError(sortError, 'Coloque pelo menos 1 jogador por time.'); return; }
-    if (players.length < numTeams) { showError(sortError, 'Jogadores insuficientes para formar os times.'); return; }
-
-    const felipePlayer  = players.find(p => matchName(p, MY_NAME));
-    const felipeInList  = !!felipePlayer;
-    const rafaelFPlayer = players.find(p => matchName(p, RAFAEL_F));
-    if (rafaelFPlayer) rafaelFDraws++;
-    /* vez sim (1ª, 4ª, 7ª…), vez não (2ª e 3ª) */
-    const rafaelWithFelipe = !!(rafaelFPlayer && felipeInList && rafaelFDraws % 3 === 1);
-
-    /* Pares que nunca podem cair no mesmo time */
-    const CONSTRAINT_PAIRS = [
-      [MY_NAME, 'direl'],
-      [MY_NAME, 'abel'],
-      [MY_NAME, 'thiago'],
-      [MY_NAME, 'brendo'],
-      [MY_NAME, 'breno'],
-      ['abel', 'thiago'],
-    ];
-    if (rafaelFPlayer && felipeInList && !rafaelWithFelipe) {
-      CONSTRAINT_PAIRS.push([MY_NAME, RAFAEL_F]);
-    }
-
-    /* Grafo de conflitos entre jogadores reais */
+    /* Conflitos: NEVER_WITH_FELIPE nunca no mesmo time que Felipe */
     const conflictsOf = new Map();
     const addConflict = (a, b) => {
       if (!a || !b || a === b) return;
@@ -420,35 +407,47 @@
       conflictsOf.get(a).add(b);
       conflictsOf.get(b).add(a);
     };
-    CONSTRAINT_PAIRS.forEach(([nameA, nameB]) => {
-      addConflict(
-        players.find(p => matchName(p, nameA)),
-        players.find(p => matchName(p, nameB))
-      );
+    NEVER_WITH_FELIPE.forEach(n => {
+      addConflict(felipePlayer, players.find(p => matchName(p, n)));
+    });
+    /* A partir do 2º sorteio, Rafael também não cai no time do Felipe */
+    if (drawCount > 0) {
+      addConflict(felipePlayer, players.find(p => matchName(p, 'rafael')));
+    }
+    /* Pares que nunca podem cair no mesmo time */
+    CONSTRAINT_PAIRS.forEach(([a, b]) => {
+      addConflict(players.find(p => matchName(p, a)), players.find(p => matchName(p, b)));
     });
 
     const teams = Array.from({ length: numTeams }, () => []);
     const placed = new Set();
 
-    /* Felipe vai para um time aleatório */
-    let felipeTeamIdx = -1;
+    /* Primeiro sorteio: Felipe no Time 3. Re-sorteios: time aleatório */
+    const FELIPE_TEAM_IDX = drawCount === 0 ? 2 : Math.floor(Math.random() * numTeams);
     if (felipeInList) {
-      felipeTeamIdx = Math.floor(Math.random() * numTeams);
-      teams[felipeTeamIdx].push(felipePlayer);
+      teams[FELIPE_TEAM_IDX].push(felipePlayer);
       placed.add(felipePlayer);
-      /* Rafael F junto com Felipe na vez certa */
-      if (rafaelWithFelipe && teams[felipeTeamIdx].length < perTeam) {
-        teams[felipeTeamIdx].push(rafaelFPlayer);
-        placed.add(rafaelFPlayer);
+      /* Apenas no primeiro sorteio força Rafael e Guilherme junto */
+      if (drawCount === 0) {
+        for (const ap of alwaysPlayers) {
+          if (!placed.has(ap) && teams[FELIPE_TEAM_IDX].length < perTeam) {
+            teams[FELIPE_TEAM_IDX].push(ap);
+            placed.add(ap);
+          }
+        }
       }
     }
 
-    /* Jogadores com conflitos são colocados primeiro, respeitando as regras */
-    const constrainedNames = [...new Set(CONSTRAINT_PAIRS.flat().filter(n => n !== MY_NAME))];
-    const constrainedPlayers = shuffle(
-      constrainedNames.map(n => players.find(p => matchName(p, n))).filter(Boolean)
+    /* Jogadores com restrições entram primeiro para garantir que os conflitos sejam respeitados */
+    const constrainedNames = [
+      ...NEVER_WITH_FELIPE,
+      ...(drawCount > 0 ? ['rafael'] : []),
+      ...CONSTRAINT_PAIRS.flat(),
+    ];
+    const neverPlayers = shuffle(
+      [...new Set(constrainedNames)].map(n => players.find(p => matchName(p, n))).filter(Boolean)
     );
-    for (const player of constrainedPlayers) {
+    for (const player of neverPlayers) {
       if (placed.has(player)) continue;
       const myConflicts = conflictsOf.get(player) || new Set();
       const validTeams = [];
@@ -464,7 +463,7 @@
       placed.add(player);
     }
 
-    /* Preencher vagas restantes com os demais jogadores */
+    /* Preencher vagas restantes com os demais */
     const freePlayers = shuffle(players.filter(p => !placed.has(p)));
     let fi = 0;
     for (let t = 0; t < numTeams; t++) {
@@ -473,10 +472,36 @@
       }
     }
 
-    renderResults(teams, freePlayers.slice(fi), felipeTeamIdx);
+    return { teams, leftover: freePlayers.slice(fi) };
   }
 
-  function renderResults(teams, leftover, felipeTeamIdx = -1) {
+  function sortear() {
+    sortError.style.display = 'none';
+
+    const numTeams = parseInt(document.getElementById('numTeams').value) || 0;
+    const perTeam  = parseInt(document.getElementById('playersPerTeam').value) || 0;
+
+    if (players.length < 2)           { showError(sortError, 'Adicione pelo menos 2 jogadores.'); return; }
+    if (numTeams < 2 || numTeams > 8) { showError(sortError, 'Número de times deve ser entre 2 e 8.'); return; }
+    if (perTeam < 1)                  { showError(sortError, 'Coloque pelo menos 1 jogador por time.'); return; }
+    if (players.length < numTeams)    { showError(sortError, 'Jogadores insuficientes para formar os times.'); return; }
+
+    const felipePlayer  = players.find(p => matchName(p, MY_NAME));
+    const alwaysPlayers = ALWAYS_WITH_FELIPE.map(n => players.find(p => matchName(p, n))).filter(Boolean);
+
+    let result;
+    let attempts = 0;
+    do {
+      result = doSortOnce(numTeams, perTeam, felipePlayer, alwaysPlayers);
+      attempts++;
+    } while (attempts < 100 && lastDrawSignature !== null && teamSignature(result.teams) === lastDrawSignature);
+
+    lastDrawSignature = teamSignature(result.teams);
+    drawCount++;
+    renderResults(result.teams, result.leftover);
+  }
+
+  function renderResults(teams, leftover) {
     const resultsDiv = document.getElementById('results');
     const grid       = document.getElementById('teamsGrid');
     const leftSec    = document.getElementById('leftoverSection');
@@ -484,6 +509,7 @@
     grid.innerHTML = teams.map((team, i) => `
       <div class="team-card team-${i}">
         <div class="team-header">
+          <span style="font-weight:800;">Time ${i + 1}</span>
           <span style="opacity:0.8; font-size:0.8rem;">${team.length} jogador${team.length !== 1 ? 'es' : ''}</span>
         </div>
         <div class="team-players">
