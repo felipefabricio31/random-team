@@ -376,6 +376,7 @@
   const MY_NAME            = 'felipe';
   const ALWAYS_WITH_FELIPE = ['Luan (Felipe)', 'luan', 'victor', 'davi'];
   const NEVER_WITH_FELIPE  = ['abel', 'thiago', 'brendo', 'breno', 'sidão', 'sidao'];
+  const FIRST_DRAW_TOGETHER = ['rafael', 'brendo', 'sidao'];
   const CONSTRAINT_PAIRS   = [
     ['michel', 'rafael'],
     ['guilherme', 'rafael'],
@@ -386,8 +387,12 @@
   let lastDrawSignature = null;
   let drawCount = 0;
 
+  function normalizeName(name) {
+    return name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
   function matchName(player, target) {
-    return player.trim().toLowerCase().includes(target.toLowerCase());
+    return normalizeName(player).includes(normalizeName(target));
   }
 
   function teamSignature(teams) {
@@ -402,6 +407,10 @@
       const playerB = players.find(p => matchName(p, b));
       return playerA && playerB && teams.some(team => team.includes(playerA) && team.includes(playerB));
     });
+  }
+
+  function findPlayersByNames(names) {
+    return names.map(n => players.find(p => matchName(p, n))).filter(Boolean);
   }
 
   function doSortOnce(numTeams, perTeam, felipePlayer, alwaysPlayers) {
@@ -427,12 +436,26 @@
     const teams = Array.from({ length: numTeams }, () => []);
     const placed = new Set();
 
-    /* Primeiro sorteio: Felipe no Time 3. Re-sorteios: time aleatório */
-    const FELIPE_TEAM_IDX = drawCount === 0 ? 2 : Math.floor(Math.random() * numTeams);
+    /* Primeiro sorteio: Felipe no Time 3 quando existir. */
+    const FELIPE_TEAM_IDX = drawCount === 0 ? Math.min(2, numTeams - 1) : Math.floor(Math.random() * numTeams);
+    const firstDrawTogetherPlayers = drawCount === 0 ? findPlayersByNames(FIRST_DRAW_TOGETHER) : [];
+    const firstDrawTogetherTeamIdx = numTeams >= 4
+      ? 3
+      : Math.min(numTeams - 1, FELIPE_TEAM_IDX === 0 ? 1 : 0);
+
+    if (firstDrawTogetherPlayers.length > 0) {
+      for (const player of firstDrawTogetherPlayers) {
+        if (!placed.has(player) && teams[firstDrawTogetherTeamIdx].length < perTeam) {
+          teams[firstDrawTogetherTeamIdx].push(player);
+          placed.add(player);
+        }
+      }
+    }
+
     if (felipeInList) {
       teams[FELIPE_TEAM_IDX].push(felipePlayer);
       placed.add(felipePlayer);
-      /* Apenas no primeiro sorteio força Rafael e Guilherme junto */
+      /* Apenas no primeiro sorteio força os nomes configurados junto com Felipe */
       if (drawCount === 0) {
         for (const ap of alwaysPlayers) {
           if (!placed.has(ap) && teams[FELIPE_TEAM_IDX].length < perTeam) {
@@ -551,6 +574,10 @@
     // if (players.length < 1)           { showError(sortError, 'Adicione pelo menos 1 jogador.'); return; }
     if (numTeams < 2 || numTeams > 8) { showError(sortError, 'Número de times deve ser entre 2 e 8.'); return; }
     if (perTeam < 1)                  { showError(sortError, 'Coloque pelo menos 1 jogador por time.'); return; }
+    if (drawCount === 0 && findPlayersByNames(FIRST_DRAW_TOGETHER).length === FIRST_DRAW_TOGETHER.length && perTeam < FIRST_DRAW_TOGETHER.length) {
+      showError(sortError, 'O primeiro sorteio precisa comportar Rafael, Brendo e Sidao no mesmo time.');
+      return;
+    }
 
     const felipePlayer  = players.find(p => matchName(p, MY_NAME));
     const alwaysPlayers = ALWAYS_WITH_FELIPE.map(n => players.find(p => matchName(p, n))).filter(Boolean);
