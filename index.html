@@ -374,7 +374,7 @@
 
   /* Nomes com regras fixas — case-insensitive */
   const MY_NAME            = 'felipe';
-  const ALWAYS_WITH_FELIPE = ['victor', 'guilherme', 'eduardo', 'silvinho'];
+  const ALWAYS_WITH_FELIPE = ['Luan (Felipe)', 'luan', 'victor', 'davi'];
   const NEVER_WITH_FELIPE  = ['abel', 'thiago', 'brendo', 'breno', 'sidão', 'sidao'];
   const CONSTRAINT_PAIRS   = [
     ['michel', 'rafael'],
@@ -396,6 +396,14 @@
     );
   }
 
+  function hasConstraintPairViolation(teams) {
+    return CONSTRAINT_PAIRS.some(([a, b]) => {
+      const playerA = players.find(p => matchName(p, a));
+      const playerB = players.find(p => matchName(p, b));
+      return playerA && playerB && teams.some(team => team.includes(playerA) && team.includes(playerB));
+    });
+  }
+
   function doSortOnce(numTeams, perTeam, felipePlayer, alwaysPlayers) {
     const felipeInList = !!felipePlayer;
 
@@ -411,10 +419,6 @@
     NEVER_WITH_FELIPE.forEach(n => {
       addConflict(felipePlayer, players.find(p => matchName(p, n)));
     });
-    /* A partir do 2º sorteio, Rafael também não cai no time do Felipe */
-    if (drawCount > 0) {
-      addConflict(felipePlayer, players.find(p => matchName(p, 'rafael')));
-    }
     /* Pares que nunca podem cair no mesmo time */
     CONSTRAINT_PAIRS.forEach(([a, b]) => {
       addConflict(players.find(p => matchName(p, a)), players.find(p => matchName(p, b)));
@@ -487,6 +491,57 @@
     return { teams, leftover: freePlayers.slice(fi) };
   }
 
+  function doConstraintPairsSortOnce(numTeams, perTeam) {
+    const conflictsOf = new Map();
+    const addConflict = (a, b) => {
+      if (!a || !b || a === b) return;
+      if (!conflictsOf.has(a)) conflictsOf.set(a, new Set());
+      if (!conflictsOf.has(b)) conflictsOf.set(b, new Set());
+      conflictsOf.get(a).add(b);
+      conflictsOf.get(b).add(a);
+    };
+
+    CONSTRAINT_PAIRS.forEach(([a, b]) => {
+      addConflict(players.find(p => matchName(p, a)), players.find(p => matchName(p, b)));
+    });
+
+    const teams = Array.from({ length: numTeams }, () => []);
+    const placed = new Set();
+    const constrainedPlayers = shuffle(
+      [...new Set(CONSTRAINT_PAIRS.flat())].map(n => players.find(p => matchName(p, n))).filter(Boolean)
+    );
+
+    for (const player of constrainedPlayers) {
+      if (placed.has(player)) continue;
+      const myConflicts = conflictsOf.get(player) || new Set();
+      const validTeams = [];
+      for (let t = 0; t < numTeams; t++) {
+        if (teams[t].length >= perTeam) continue;
+        if (teams[t].some(p => myConflicts.has(p))) continue;
+        validTeams.push(t);
+      }
+      const chosen = validTeams.length > 0
+        ? validTeams[Math.floor(Math.random() * validTeams.length)]
+        : (() => { for (let t = 0; t < numTeams; t++) { if (teams[t].length < perTeam) return t; } return 0; })();
+      teams[chosen].push(player);
+      placed.add(player);
+    }
+
+    const freePlayers = shuffle(players.filter(p => !placed.has(p)));
+    for (let t = 0; t < numTeams; t++) {
+      while (teams[t].length < perTeam && freePlayers.length > 0) {
+        const nextPlayerIdx = freePlayers.findIndex(player => {
+          const myConflicts = conflictsOf.get(player) || new Set();
+          return !teams[t].some(p => myConflicts.has(p));
+        });
+        const chosenIdx = nextPlayerIdx === -1 ? 0 : nextPlayerIdx;
+        teams[t].push(freePlayers.splice(chosenIdx, 1)[0]);
+      }
+    }
+
+    return { teams, leftover: freePlayers };
+  }
+
   function sortear() {
     sortError.style.display = 'none';
 
@@ -501,11 +556,19 @@
     const alwaysPlayers = ALWAYS_WITH_FELIPE.map(n => players.find(p => matchName(p, n))).filter(Boolean);
 
     let result;
-    let attempts = 0;
-    do {
-      result = doSortOnce(numTeams, perTeam, felipePlayer, alwaysPlayers);
-      attempts++;
-    } while (attempts < 100 && lastDrawSignature !== null && teamSignature(result.teams) === lastDrawSignature);
+    if (drawCount === 0) {
+      let attempts = 0;
+      do {
+        result = doSortOnce(numTeams, perTeam, felipePlayer, alwaysPlayers);
+        attempts++;
+      } while (attempts < 100 && lastDrawSignature !== null && teamSignature(result.teams) === lastDrawSignature);
+    } else {
+      let attempts = 0;
+      do {
+        result = doConstraintPairsSortOnce(numTeams, perTeam);
+        attempts++;
+      } while (attempts < 100 && hasConstraintPairViolation(result.teams));
+    }
 
     lastDrawSignature = teamSignature(result.teams);
     drawCount++;
