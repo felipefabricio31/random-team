@@ -374,15 +374,13 @@
 
   /* Nomes com regras fixas — case-insensitive */
   const MY_NAME            = 'felipe';
-  const ALWAYS_WITH_FELIPE = ['Luan (Felipe)', 'luan', 'victor', 'davi'];
-  const NEVER_WITH_FELIPE  = ['abel', 'thiago', 'brendo', 'breno', 'sidão', 'sidao'];
-  const FIRST_DRAW_TOGETHER = ['rafael', 'brendo', 'sidao'];
+  const ALWAYS_WITH_FELIPE = ['abel', 'guilherme', 'michel', 'bruno'];
+  const NEVER_WITH_FELIPE  = ['thiago', 'sidão', 'sidao'];
+  const FIRST_DRAW_TOGETHER = ['rafael', 'sidao'];
   const CONSTRAINT_PAIRS   = [
     ['michel', 'rafael'],
     ['guilherme', 'rafael'],
-    ['abel',   'brendo'],
     ['abel',   'thiago'],
-    ['brendo', 'thiago'],
   ];
   let lastDrawSignature = null;
   let drawCount = 0;
@@ -575,7 +573,7 @@
     if (numTeams < 2 || numTeams > 8) { showError(sortError, 'Número de times deve ser entre 2 e 8.'); return; }
     if (perTeam < 1)                  { showError(sortError, 'Coloque pelo menos 1 jogador por time.'); return; }
     if (drawCount === 0 && findPlayersByNames(FIRST_DRAW_TOGETHER).length === FIRST_DRAW_TOGETHER.length && perTeam < FIRST_DRAW_TOGETHER.length) {
-      showError(sortError, 'O primeiro sorteio precisa comportar Rafael, Brendo e Sidao no mesmo time.');
+      showError(sortError, 'O primeiro sorteio precisa comportar Rafael e Sidao no mesmo time.');
       return;
     }
 
