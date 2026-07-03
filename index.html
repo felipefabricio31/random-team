@@ -374,13 +374,11 @@
 
   /* Nomes com regras fixas — case-insensitive */
   const MY_NAME            = 'felipe';
-  const ALWAYS_WITH_FELIPE = ['abel', 'guilherme', 'michel', 'bruno'];
-  const NEVER_WITH_FELIPE  = ['thiago', 'sidão', 'sidao'];
-  const FIRST_DRAW_TOGETHER = ['rafael', 'sidao'];
+  const ALWAYS_WITH_FELIPE = ['bruno', 'rafael', 'elizel (Edu)', 'lucas'];
+  const NEVER_WITH_FELIPE  = ['thiago', 'abel'];
   const CONSTRAINT_PAIRS   = [
     ['michel', 'rafael'],
-    ['guilherme', 'rafael'],
-    ['abel',   'thiago'],
+    ['abel', 'thiago'],
   ];
   let lastDrawSignature = null;
   let drawCount = 0;
@@ -407,8 +405,206 @@
     });
   }
 
-  function findPlayersByNames(names) {
-    return names.map(n => players.find(p => matchName(p, n))).filter(Boolean);
+  /* Tamanho-alvo de cada time quando falta jogador: preenche em ordem,
+     a falta sempre sobra para o(s) último(s) time(s). */
+  function computeShortageTargets(numTeams, perTeam, totalPlayers, minByTeam) {
+    const targets = new Array(numTeams).fill(0);
+    const mins = minByTeam || new Array(numTeams).fill(0);
+    let remaining = totalPlayers;
+    for (let t = 0; t < numTeams; t++) {
+      targets[t] = Math.min(mins[t], perTeam, remaining);
+      remaining -= targets[t];
+    }
+    for (let t = 0; t < numTeams; t++) {
+      const extra = Math.min(perTeam - targets[t], remaining);
+      if (extra > 0) { targets[t] += extra; remaining -= extra; }
+    }
+    return targets;
+  }
+
+  /* Busca exaustiva (backtracking): tenta encaixar os jogadores restritos
+     nos times respeitando conflitos e as vagas-alvo de cada time. */
+  function findConstrainedAssignment(constrainedPlayers, conflictsOf, forcedTeam, targets) {
+    const remaining = targets.slice();
+    const teamOf = new Map();
+    const order = [...constrainedPlayers].sort((a, b) => (forcedTeam.has(a) ? 0 : 1) - (forcedTeam.has(b) ? 0 : 1));
+
+    function conflictsWithTeam(player, t) {
+      const myConflicts = conflictsOf.get(player) || new Set();
+      for (const other of myConflicts) if (teamOf.get(other) === t) return true;
+      return false;
+    }
+
+    function backtrack(idx) {
+      if (idx === order.length) return true;
+      const player = order[idx];
+      const candidates = forcedTeam.has(player) ? [forcedTeam.get(player)] : targets.map((_, t) => t);
+      for (const t of candidates) {
+        if (remaining[t] <= 0 || conflictsWithTeam(player, t)) continue;
+        remaining[t]--; teamOf.set(player, t);
+        if (backtrack(idx + 1)) return true;
+        remaining[t]++; teamOf.delete(player);
+      }
+      return false;
+    }
+
+    return backtrack(0) ? teamOf : null;
+  }
+
+  /* Preenche as vagas restantes de cada time (até o alvo) com jogadores livres */
+  function fillFreeSlots(teams, targets, placed) {
+    const freePlayers = shuffle(players.filter(p => !placed.has(p)));
+    let fi = 0;
+    for (let t = 0; t < teams.length; t++) {
+      while (teams[t].length < targets[t] && fi < freePlayers.length) {
+        teams[t].push(freePlayers[fi++]);
+      }
+    }
+    return freePlayers.slice(fi);
+  }
+
+  function buildPairConflicts(pairPlayers, extra) {
+    const conflictsOf = new Map();
+    const addConflict = (a, b) => {
+      if (!a || !b || a === b) return;
+      if (!conflictsOf.has(a)) conflictsOf.set(a, new Set());
+      if (!conflictsOf.has(b)) conflictsOf.set(b, new Set());
+      conflictsOf.get(a).add(b);
+      conflictsOf.get(b).add(a);
+    };
+    pairPlayers.forEach(([a, b]) => addConflict(a, b));
+    if (extra) extra.forEach(([a, b]) => addConflict(a, b));
+    return conflictsOf;
+  }
+
+  /* 1º sorteio quando falta jogador para fechar todos os times:
+     tenta manter as regras normais; se nenhum cenário fechar os times,
+     cai em fallbacks progressivamente mais permissivos. */
+  function doShortageSortOnce(numTeams, perTeam, felipePlayer, alwaysPlayers) {
+    const lastTeamIdx = numTeams - 1;
+    const felipeTeamIdx = Math.min(2, numTeams - 1);
+    const rafaelPlayer = players.find(p => matchName(p, 'rafael'));
+
+    const neverPlayers = NEVER_WITH_FELIPE.map(n => players.find(p => matchName(p, n))).filter(Boolean);
+    const pairPlayers = CONSTRAINT_PAIRS.map(([a, b]) => [players.find(p => matchName(p, a)), players.find(p => matchName(p, b))]);
+
+    function attempt(forcedTeam, includeNever, includePairs, minByTeam) {
+      const conflictsOf = includePairs ? buildPairConflicts(pairPlayers) : new Map();
+      if (includeNever && felipePlayer) {
+        neverPlayers.forEach(n => {
+          if (!conflictsOf.has(felipePlayer)) conflictsOf.set(felipePlayer, new Set());
+          if (!conflictsOf.has(n)) conflictsOf.set(n, new Set());
+          conflictsOf.get(felipePlayer).add(n);
+          conflictsOf.get(n).add(felipePlayer);
+        });
+      }
+      const constrained = new Set();
+      if (felipePlayer) constrained.add(felipePlayer);
+      if (includeNever) neverPlayers.forEach(p => constrained.add(p));
+      if (includePairs) pairPlayers.forEach(([a, b]) => { if (a) constrained.add(a); if (b) constrained.add(b); });
+      forcedTeam.forEach((_, p) => constrained.add(p));
+      const targets = computeShortageTargets(numTeams, perTeam, players.length, minByTeam);
+      const assignment = findConstrainedAssignment([...constrained], conflictsOf, forcedTeam, targets);
+      return assignment ? { assignment, targets } : null;
+    }
+
+    const zeroMins = new Array(numTeams).fill(0);
+    const lastMins = new Array(numTeams).fill(0);
+    lastMins[lastTeamIdx] = (felipePlayer ? 1 : 0) + (rafaelPlayer ? 1 : 0);
+
+    /* Nível 0: regras normais, Felipe no time de sempre (tenta manter Rafael junto, se der) */
+    let forcedTeam = new Map();
+    if (felipePlayer) forcedTeam.set(felipePlayer, felipeTeamIdx);
+    let result = null;
+    if (felipePlayer && rafaelPlayer) {
+      const withRafael = new Map(forcedTeam);
+      withRafael.set(rafaelPlayer, felipeTeamIdx);
+      result = attempt(withRafael, true, true, zeroMins);
+    }
+    if (!result) result = attempt(forcedTeam, true, true, zeroMins);
+
+    /* Nível 1: Felipe e Rafael forçados juntos no último time, mantendo NEVER_WITH_FELIPE */
+    if (!result && felipePlayer) {
+      forcedTeam = new Map();
+      forcedTeam.set(felipePlayer, lastTeamIdx);
+      if (rafaelPlayer) forcedTeam.set(rafaelPlayer, lastTeamIdx);
+      result = attempt(forcedTeam, true, true, lastMins);
+    }
+
+    /* Nível 2: mesma coisa, mas desconsiderando NEVER_WITH_FELIPE */
+    if (!result && felipePlayer) {
+      result = attempt(forcedTeam, false, true, lastMins);
+    }
+
+    /* Nível 3: último recurso — ignora também os CONSTRAINT_PAIRS, mas ainda respeita o tamanho dos times */
+    if (!result && felipePlayer) {
+      result = attempt(forcedTeam, false, false, lastMins);
+    }
+
+    const teams = Array.from({ length: numTeams }, () => []);
+    const placed = new Set();
+    let felipeFinalTeam = felipeTeamIdx;
+    let targets;
+
+    if (result) {
+      targets = result.targets;
+      result.assignment.forEach((t, player) => { teams[t].push(player); placed.add(player); });
+      if (felipePlayer) felipeFinalTeam = result.assignment.get(felipePlayer);
+    } else {
+      /* Não deveria ocorrer (Nível 3 cobre praticamente todos os casos), mas garante Felipe/Rafael juntos mesmo assim */
+      targets = computeShortageTargets(numTeams, perTeam, players.length, lastMins);
+      felipeFinalTeam = lastTeamIdx;
+      if (felipePlayer) { teams[lastTeamIdx].push(felipePlayer); placed.add(felipePlayer); }
+      if (rafaelPlayer) { teams[lastTeamIdx].push(rafaelPlayer); placed.add(rafaelPlayer); }
+    }
+
+    /* Força os demais "sempre com Felipe" no time dele, respeitando o alvo */
+    if (felipePlayer) {
+      for (const ap of alwaysPlayers) {
+        if (!placed.has(ap) && teams[felipeFinalTeam].length < targets[felipeFinalTeam]) {
+          teams[felipeFinalTeam].push(ap);
+          placed.add(ap);
+        }
+      }
+    }
+
+    const leftover = fillFreeSlots(teams, targets, placed);
+
+    /* Reposiciona Felipe: aleatoriamente segundo ou último no seu time */
+    if (felipePlayer && felipeFinalTeam < teams.length) {
+      const t = teams[felipeFinalTeam];
+      const idx = t.indexOf(felipePlayer);
+      if (idx !== -1 && t.length > 1) {
+        t.splice(idx, 1);
+        const pos = Math.random() < 0.5 ? 1 : t.length;
+        t.splice(pos, 0, felipePlayer);
+      }
+    }
+
+    return { teams, leftover };
+  }
+
+  /* Re-sorteios quando falta jogador para fechar todos os times */
+  function doShortageConstraintPairsSortOnce(numTeams, perTeam) {
+    const targets = computeShortageTargets(numTeams, perTeam, players.length);
+    const pairPlayers = CONSTRAINT_PAIRS.map(([a, b]) => [players.find(p => matchName(p, a)), players.find(p => matchName(p, b))]);
+    const conflictsOf = buildPairConflicts(pairPlayers);
+
+    const constrained = new Set();
+    pairPlayers.forEach(([a, b]) => { if (a) constrained.add(a); if (b) constrained.add(b); });
+
+    const assignment = findConstrainedAssignment([...constrained], conflictsOf, new Map(), targets);
+
+    const teams = Array.from({ length: numTeams }, () => []);
+    const placed = new Set();
+
+    if (assignment) {
+      assignment.forEach((t, player) => { teams[t].push(player); placed.add(player); });
+    }
+    /* Se nenhum cenário fechar os times, ignora CONSTRAINT_PAIRS como último recurso */
+
+    const leftover = fillFreeSlots(teams, targets, placed);
+    return { teams, leftover };
   }
 
   function doSortOnce(numTeams, perTeam, felipePlayer, alwaysPlayers) {
@@ -436,19 +632,6 @@
 
     /* Primeiro sorteio: Felipe no Time 3 quando existir. */
     const FELIPE_TEAM_IDX = drawCount === 0 ? Math.min(2, numTeams - 1) : Math.floor(Math.random() * numTeams);
-    const firstDrawTogetherPlayers = drawCount === 0 ? findPlayersByNames(FIRST_DRAW_TOGETHER) : [];
-    const firstDrawTogetherTeamIdx = numTeams >= 4
-      ? 3
-      : Math.min(numTeams - 1, FELIPE_TEAM_IDX === 0 ? 1 : 0);
-
-    if (firstDrawTogetherPlayers.length > 0) {
-      for (const player of firstDrawTogetherPlayers) {
-        if (!placed.has(player) && teams[firstDrawTogetherTeamIdx].length < perTeam) {
-          teams[firstDrawTogetherTeamIdx].push(player);
-          placed.add(player);
-        }
-      }
-    }
 
     if (felipeInList) {
       teams[FELIPE_TEAM_IDX].push(felipePlayer);
@@ -572,27 +755,32 @@
     // if (players.length < 1)           { showError(sortError, 'Adicione pelo menos 1 jogador.'); return; }
     if (numTeams < 2 || numTeams > 8) { showError(sortError, 'Número de times deve ser entre 2 e 8.'); return; }
     if (perTeam < 1)                  { showError(sortError, 'Coloque pelo menos 1 jogador por time.'); return; }
-    if (drawCount === 0 && findPlayersByNames(FIRST_DRAW_TOGETHER).length === FIRST_DRAW_TOGETHER.length && perTeam < FIRST_DRAW_TOGETHER.length) {
-      showError(sortError, 'O primeiro sorteio precisa comportar Rafael e Sidao no mesmo time.');
-      return;
-    }
 
     const felipePlayer  = players.find(p => matchName(p, MY_NAME));
     const alwaysPlayers = ALWAYS_WITH_FELIPE.map(n => players.find(p => matchName(p, n))).filter(Boolean);
+    const shortage = players.length < numTeams * perTeam;
 
     let result;
     if (drawCount === 0) {
-      let attempts = 0;
-      do {
-        result = doSortOnce(numTeams, perTeam, felipePlayer, alwaysPlayers);
-        attempts++;
-      } while (attempts < 100 && lastDrawSignature !== null && teamSignature(result.teams) === lastDrawSignature);
+      if (shortage) {
+        result = doShortageSortOnce(numTeams, perTeam, felipePlayer, alwaysPlayers);
+      } else {
+        let attempts = 0;
+        do {
+          result = doSortOnce(numTeams, perTeam, felipePlayer, alwaysPlayers);
+          attempts++;
+        } while (attempts < 100 && lastDrawSignature !== null && teamSignature(result.teams) === lastDrawSignature);
+      }
     } else {
-      let attempts = 0;
-      do {
-        result = doConstraintPairsSortOnce(numTeams, perTeam);
-        attempts++;
-      } while (attempts < 100 && hasConstraintPairViolation(result.teams));
+      if (shortage) {
+        result = doShortageConstraintPairsSortOnce(numTeams, perTeam);
+      } else {
+        let attempts = 0;
+        do {
+          result = doConstraintPairsSortOnce(numTeams, perTeam);
+          attempts++;
+        } while (attempts < 100 && hasConstraintPairViolation(result.teams));
+      }
     }
 
     lastDrawSignature = teamSignature(result.teams);
