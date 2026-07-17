@@ -377,15 +377,19 @@
   /* Time do Felipe no primeiro sorteio (1-indexado, igual ao rótulo "Time N" exibido na tela).
      Se o número de times sorteados for menor que isso, cai automaticamente no último time. */
   const FELIPE_TEAM_NUMBER = 3;
-  const ALWAYS_WITH_FELIPE = ['michel', 'dudu', 'jhonatan', 'giovanni'];
+  const ALWAYS_WITH_FELIPE = ['michel', 'dudu', 'bruno'];
   const NEVER_WITH_FELIPE  = ['abel', 'thiago'];
   const CONSTRAINT_PAIRS   = [
     ['paulo henrique (felipe)', 'rafael'],
     ['paulo henrique (felipe)', 'bruno'],
     ['rafael', 'bruno'],
+    ['rafael', 'michel'],
     ['abel', 'thiago'],
     ['abel', 'leco'],
   ];
+  /* Jogadores que, se possível, devem ficar no último time — só cai em outro
+     time se não houver como fechar a sequência sem ele. */
+  const PREFER_LAST_TEAM   = ['abel'];
   let lastDrawSignature = null;
   let drawCount = 0;
 
@@ -436,6 +440,10 @@
 
     const teams = Array.from({ length: numTeams }, () => []);
     const alwaysSet = new Set(alwaysPlayers);
+    const preferLastSet = new Set(
+      PREFER_LAST_TEAM.map(n => players.find(p => matchName(p, n))).filter(Boolean)
+    );
+    const lastTeamIdx = numTeams - 1;
 
     /* Primeiro sorteio: Felipe no time configurado em FELIPE_TEAM_NUMBER. */
     const FELIPE_TEAM_IDX = drawCount === 0 ? Math.min(FELIPE_TEAM_NUMBER - 1, numTeams - 1) : Math.floor(Math.random() * numTeams);
@@ -445,11 +453,14 @@
     /* Preenche os times sempre em sequência (Time 1 até completar, depois Time 2, ...).
        O time do Felipe recebe prioridade para ALWAYS_WITH_FELIPE só quando chega a vez
        dele; os demais times evitam pegar esses jogadores enquanto houver outra opção
-       sem conflito, para reservá-los ao time do Felipe. Nunca deixa um time anterior
-       incompleto por causa disso — e se não houver ninguém sem conflito disponível,
-       a regra é ignorada para manter o time completo. */
+       sem conflito, para reservá-los ao time do Felipe. Times antes do último também
+       evitam pegar PREFER_LAST_TEAM (ex.: Abel) enquanto houver outra opção, reservando-os
+       para o último time. Nunca deixa um time anterior incompleto por causa disso — e se
+       não houver ninguém sem conflito disponível, a regra é ignorada para manter o time
+       completo. */
     for (let t = 0; t < numTeams; t++) {
       const isFelipeTeam = felipeInList && t === FELIPE_TEAM_IDX && drawCount === 0;
+      const isLastTeam = t === lastTeamIdx;
       if (isFelipeTeam) {
         teams[t].push(felipePlayer);
       }
@@ -458,7 +469,7 @@
         if (isFelipeTeam) {
           idx = pool.findIndex(p => alwaysSet.has(p) && !conflictsWithTeam(p, teams[t]));
         } else {
-          idx = pool.findIndex(p => !alwaysSet.has(p) && !conflictsWithTeam(p, teams[t]));
+          idx = pool.findIndex(p => !alwaysSet.has(p) && (isLastTeam || !preferLastSet.has(p)) && !conflictsWithTeam(p, teams[t]));
         }
         if (idx === -1) idx = pool.findIndex(p => !conflictsWithTeam(p, teams[t]));
         if (idx === -1) idx = pool.length > 0 ? 0 : -1;
@@ -500,6 +511,9 @@
     const constrainedPlayers = shuffle(
       [...new Set(CONSTRAINT_PAIRS.flat())].map(n => players.find(p => matchName(p, n))).filter(Boolean)
     );
+    const preferLastSet = new Set(
+      PREFER_LAST_TEAM.map(n => players.find(p => matchName(p, n))).filter(Boolean)
+    );
 
     for (const player of constrainedPlayers) {
       if (placed.has(player)) continue;
@@ -512,13 +526,16 @@
       }
       /* Preenche sempre os primeiros times na sequência; só ignora as regras
          (e sorteia aleatoriamente entre os times com vaga) se nenhum time
-         conseguir respeitar as restrições. */
+         conseguir respeitar as restrições. Jogadores de PREFER_LAST_TEAM (ex.: Abel)
+         vão para o último time válido/aberto em vez do primeiro, quando possível. */
+      const preferLast = preferLastSet.has(player);
       const chosen = validTeams.length > 0
-        ? validTeams[0]
+        ? (preferLast ? validTeams[validTeams.length - 1] : validTeams[0])
         : (() => {
             const openTeams = [];
             for (let t = 0; t < numTeams; t++) { if (teams[t].length < perTeam) openTeams.push(t); }
-            return openTeams.length > 0 ? openTeams[Math.floor(Math.random() * openTeams.length)] : 0;
+            if (openTeams.length === 0) return 0;
+            return preferLast ? openTeams[openTeams.length - 1] : openTeams[Math.floor(Math.random() * openTeams.length)];
           })();
       teams[chosen].push(player);
       placed.add(player);
