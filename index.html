@@ -373,18 +373,18 @@
   }
 
   /* Nomes com regras fixas — case-insensitive */
-  const MY_NAME            = 'felipe';
+  const MY_NAME = 'felipe';
   /* Time do Felipe no primeiro sorteio (1-indexado, igual ao rótulo "Time N" exibido na tela).
      Se o número de times sorteados for menor que isso, cai automaticamente no último time. */
   const FELIPE_TEAM_NUMBER = 3;
-  const ALWAYS_WITH_FELIPE = ['luan', 'bruno', 'thiago', 'lucas'];
-  const NEVER_WITH_FELIPE  = ['abel'];
+  const ALWAYS_WITH_FELIPE = ['michel', 'dudu', 'jhonatan', 'giovanni'];
+  const NEVER_WITH_FELIPE  = ['abel', 'thiago'];
   const CONSTRAINT_PAIRS   = [
-    ['michel', 'rafael'],
+    ['paulo henrique (felipe)', 'rafael'],
+    ['paulo henrique (felipe)', 'bruno'],
+    ['rafael', 'bruno'],
     ['abel', 'thiago'],
-    ['abel', 'jose'],
-    ['abel', 'jhonatan'],
-    ['abel', 'michel'],
+    ['abel', 'leco'],
   ];
   let lastDrawSignature = null;
   let drawCount = 0;
